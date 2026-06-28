@@ -31,6 +31,16 @@ interface MainLayoutProps {
   children: React.ReactNode;
 }
 
+const getMeaningVi = (item: any) =>
+  item?.meanings?.find((meaning: any) => meaning?.meaningVi?.trim())?.meaningVi?.trim()
+  || item?.meaningVi?.trim()
+  || '';
+
+const getMeaningEn = (item: any) =>
+  item?.meanings?.find((meaning: any) => meaning?.meaningEn?.trim())?.meaningEn?.trim()
+  || item?.meaningEn?.trim()
+  || '';
+
 export function MainLayout({ children }: MainLayoutProps) {
   const { data: user } = useMe();
   const navigate = useNavigate();
@@ -103,7 +113,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
   };
 
-  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const performSearch = async (query: string) => {
     const trimmed = query.trim();
@@ -117,11 +127,13 @@ export function MainLayout({ children }: MainLayoutProps) {
     setSelectedDeckId('');
 
     try {
-      const res = await httpClient.get(`/vocabularies?search=${encodeURIComponent(trimmed)}&limit=10`);
-      const items = res.data.data.items || [];
+      // Use fuzzy search endpoint: exact → prefix → fuzzy fallback
+      const res = await httpClient.get(`/vocabularies/search?q=${encodeURIComponent(trimmed)}&limit=10`);
+      const searchData = res.data.data;
+      const items = searchData.results || [];
 
       const exact = items.find(
-        (x: any) => x.text?.trim().toLowerCase() === trimmed.toLowerCase()
+        (x: any) => (x.matchType === 'exact' || x.text?.trim().toLowerCase() === trimmed.toLowerCase())
       );
 
       if (exact) {
@@ -198,6 +210,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     { path: '/vocabularies', label: 'Dictionary', icon: Book, color: 'text-emerald-500 hover:bg-emerald-50' },
     { path: '/flashcards', label: 'Flashcards', icon: Layers, color: 'text-brand-pink hover:bg-brand-pink/10' },
     { path: '/contributions', label: 'Contributions', icon: PlusCircle, color: 'text-amber-500 hover:bg-amber-50' },
+    ...(user?.role === 'admin' ? [{ path: '/vocabularies/add', label: 'Add Vocab', icon: Plus, color: 'text-purple-500 hover:bg-purple-50' }] : []),
   ];
 
   const isActive = (path: string) => {
@@ -412,16 +425,20 @@ export function MainLayout({ children }: MainLayoutProps) {
                         <p className="text-xs text-text-muted font-bold">{searchResult.phonetic}</p>
                       )}
 
-                      <div className="py-2.5 border-t border-b border-gray-100">
-                        <p className="font-bold text-text-primary text-sm leading-snug">
-                          {searchResult.meanings?.[0]?.meaningVi || searchResult.meaningVi || 'Chưa có nghĩa'}
-                        </p>
-                        {(searchResult.meanings?.[0]?.meaningEn || searchResult.meaningEn) && (
-                          <p className="text-xs text-text-secondary italic mt-0.5">
-                            {searchResult.meanings?.[0]?.meaningEn || searchResult.meaningEn}
-                          </p>
-                        )}
-                      </div>
+                      {(getMeaningVi(searchResult) || getMeaningEn(searchResult)) && (
+                        <div className="py-2.5 border-t border-b border-gray-100">
+                          {getMeaningVi(searchResult) && (
+                            <p className="font-bold text-text-primary text-sm leading-snug">
+                              {getMeaningVi(searchResult)}
+                            </p>
+                          )}
+                          {getMeaningEn(searchResult) && (
+                            <p className="text-xs text-text-secondary italic mt-0.5">
+                              {getMeaningEn(searchResult)}
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {(searchResult.meanings?.[0]?.examples?.[0] || searchResult.exampleEn) && (
                         <div className="text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -491,16 +508,21 @@ export function MainLayout({ children }: MainLayoutProps) {
                   ) : similarResults.length > 0 ? (
                     <div className="p-3 space-y-1.5">
                       <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-1">Similar matches</p>
-                      {similarResults.map((item: any) => (
-                        <button
-                          key={item.id || item._id}
-                          onClick={() => handleSearchImmediate(item.text)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-brand-pink/5 rounded-xl transition group"
-                        >
-                          <span className="font-bold text-text-primary text-sm block group-hover:text-brand-pink transition">{item.text}</span>
-                          <span className="text-xs text-text-secondary line-clamp-1">{item.meanings?.[0]?.meaningVi || 'Chưa có nghĩa'}</span>
-                        </button>
-                      ))}
+                      {similarResults.map((item: any) => {
+                        const meaningVi = getMeaningVi(item);
+                        return (
+                          <button
+                            key={item.id || item._id}
+                            onClick={() => handleSearchImmediate(item.text)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-brand-pink/5 rounded-xl transition group"
+                          >
+                            <span className="font-bold text-text-primary text-sm block group-hover:text-brand-pink transition">{item.text}</span>
+                            {meaningVi && (
+                              <span className="text-xs text-text-secondary line-clamp-1">{meaningVi}</span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="p-4 space-y-3">

@@ -9,6 +9,7 @@ import { LoginPage } from './features/auth/pages/LoginPage';
 import { RegisterPage } from './features/auth/pages/RegisterPage';
 import { VocabularyListPage } from './features/vocabulary/pages/VocabularyListPage';
 import { VocabularyDetailPage } from './features/vocabulary/pages/VocabularyDetailPage';
+import { AddVocabularyPage } from './features/vocabulary/pages/AddVocabularyPage';
 import { ReadingListPage } from './features/reading/pages/ReadingListPage';
 import { ReadingDetailPage } from './features/reading/pages/ReadingDetailPage';
 import { DeckListPage } from './features/flashcard/pages/DeckListPage';
@@ -100,6 +101,10 @@ export const router = createBrowserRouter([
           {
             path: '/contributions',
             element: <ContributionPage />,
+          },
+          {
+            path: '/vocabularies/add',
+            element: <AddVocabularyPage />,
           },
         ],
       },
