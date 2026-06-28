@@ -1,0 +1,75 @@
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-primary-pink: #FE9EC7;
+  --color-cream-yellow: #F9F6C4;
+  --color-sky-blue: #89D4FF;
+  --color-bright-blue: #44ACFF;
+
+  --color-text-primary: #1F2937;
+  --color-text-secondary: #6B7280;
+  --color-muted: #9CA3AF;
+  --color-border: #E5E7EB;
+  --color-background: #F8FAFC;
+
+  --radius-control: 16px;
+  --radius-card: 24px;
+  --radius-large: 32px;
+  --radius-pill: 999px;
+
+  --shadow-soft: 0 10px 30px rgba(31, 41, 55, 0.06);
+  --shadow-pastel: 0 16px 40px rgba(254, 158, 199, 0.16);
+}
+
+body {
+  font-family: 'Quicksand', system-ui, -apple-system, sans-serif;
+  color: var(--color-text-primary);
+  background-color: var(--color-background);
+  margin: 0;
+  padding: 0;
+  transition: background-color 180ms ease;
+}
+
+/* Custom rounded animations & helper classes */
+.rounded-btn {
+  border-radius: var(--radius-pill);
+}
+
+.rounded-card {
+  border-radius: var(--radius-card);
+}
+
+.rounded-input {
+  border-radius: var(--radius-control);
+}
+
+.shadow-soft-box {
+  box-shadow: var(--shadow-soft);
+}
+
+.transition-all-180 {
+  transition: all 180ms ease;
+}
+
+/* Custom scrollbars for a clean visual feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(229, 231, 235, 0.8);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
+}
