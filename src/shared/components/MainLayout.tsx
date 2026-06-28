@@ -38,10 +38,22 @@ export function MainLayout({ children }: MainLayoutProps) {
   const queryClient = useQueryClient();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSearchModal, setShowSearchModal] = useState(false);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchResult, setSearchResult] = useState<any>(null);
   const [similarResults, setSimilarResults] = useState<any[]>([]);
+  const searchRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSearchDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
   const [aiDefineLoading, setAiDefineLoading] = useState(false);
 
   // Deck adding state
@@ -97,7 +109,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     const trimmed = query.trim();
     if (!trimmed) return;
 
-    setShowSearchModal(true);
+    setShowSearchDropdown(true);
     setSearchLoading(true);
     setSearchResult(null);
     setSimilarResults([]);
@@ -105,11 +117,9 @@ export function MainLayout({ children }: MainLayoutProps) {
     setSelectedDeckId('');
 
     try {
-      // Fetch vocabulary matching the query from DB
       const res = await httpClient.get(`/vocabularies?search=${encodeURIComponent(trimmed)}&limit=10`);
       const items = res.data.data.items || [];
-      
-      // Find exact match (case insensitive)
+
       const exact = items.find(
         (x: any) => x.text?.trim().toLowerCase() === trimmed.toLowerCase()
       );
@@ -232,7 +242,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             </div>
             <div>
               <span className="font-extrabold text-xl tracking-tight text-text-primary">
-                Aura<span className="text-brand-pink">English</span>
+                <span className="text-brand-pink">Hagu</span>
               </span>
               <p className="text-[10px] text-text-secondary font-bold tracking-wider uppercase -mt-0.5">SRS & Readings</p>
             </div>
@@ -332,27 +342,187 @@ export function MainLayout({ children }: MainLayoutProps) {
               <div className="w-8 h-8 bg-brand-pink/10 rounded-xl flex items-center justify-center shadow-sm">
                 <img src="/bunny_reading.png" className="w-5.5 h-5.5 object-contain" alt="Logo" />
               </div>
-              <span className="font-extrabold text-lg text-text-primary hidden sm:inline-block">AuraEnglish</span>
+              <span className="font-extrabold text-lg text-text-primary hidden sm:inline-block">Hagu</span>
             </Link>
 
-            {/* Global Search Input */}
-            <div className="relative w-full">
+            {/* Global Search Input with Inline Dropdown */}
+            <div className="relative w-full" ref={searchRef}>
               <input
                 type="text"
-                placeholder="Search word or phrase (e.g. curious, vertical farming)..."
+                placeholder="Search a word or phrase..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  if (!e.target.value.trim()) {
+                    setShowSearchDropdown(false);
+                    setSearchResult(null);
+                    setSimilarResults([]);
+                  }
+                }}
+                onFocus={() => {
+                  if (searchQuery.trim() && (searchResult || similarResults.length > 0 || searchLoading)) {
+                    setShowSearchDropdown(true);
+                  }
+                }}
                 onKeyDown={handleSearchKeyDown}
-                className="w-full bg-slate-50 border-0 focus:ring-2 focus:ring-brand-pink text-text-primary rounded-2xl pl-10 pr-4 py-2 text-xs md:text-sm font-semibold outline-none transition"
+                className="w-full bg-slate-50 border-0 focus:ring-2 focus:ring-brand-pink text-text-primary rounded-2xl pl-10 pr-9 py-2 text-xs md:text-sm font-semibold outline-none transition"
               />
-              <Search className="w-4.5 h-4.5 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-text-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
               {searchQuery && (
                 <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setShowSearchDropdown(false);
+                    setSearchResult(null);
+                    setSimilarResults([]);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 hover:bg-slate-200 rounded-full transition"
                 >
                   <X className="w-3.5 h-3.5 text-text-muted" />
                 </button>
+              )}
+
+              {/* Inline Search Dropdown */}
+              {showSearchDropdown && searchQuery.trim() && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 max-h-[70vh] overflow-y-auto animate-fade-in">
+                  {searchLoading ? (
+                    <div className="py-6 flex flex-col items-center gap-2">
+                      <div className="w-8 h-8 border-3 border-brand-pink border-t-transparent rounded-full animate-spin" />
+                      <p className="text-xs font-semibold text-text-secondary">Searching...</p>
+                    </div>
+                  ) : searchResult ? (
+                    <div className="p-4 space-y-3">
+                      {/* Word found */}
+                      <div className="flex justify-between items-start gap-2">
+                        <div>
+                          <h4 className="text-xl font-black text-brand-pink leading-none">{searchResult.text}</h4>
+                          <p className="text-[10px] text-text-muted font-bold uppercase tracking-wider mt-1">
+                            {searchResult.type?.replace('_', ' ')} {searchResult.level ? `· ${searchResult.level}` : ''}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setShowSearchDropdown(false)}
+                          className="p-1 hover:bg-gray-100 rounded-full transition shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5 text-text-muted" />
+                        </button>
+                      </div>
+
+                      {searchResult.phonetic && (
+                        <p className="text-xs text-text-muted font-bold">{searchResult.phonetic}</p>
+                      )}
+
+                      <div className="py-2.5 border-t border-b border-gray-100">
+                        <p className="font-bold text-text-primary text-sm leading-snug">
+                          {searchResult.meanings?.[0]?.meaningVi || searchResult.meaningVi || 'Chưa có nghĩa'}
+                        </p>
+                        {(searchResult.meanings?.[0]?.meaningEn || searchResult.meaningEn) && (
+                          <p className="text-xs text-text-secondary italic mt-0.5">
+                            {searchResult.meanings?.[0]?.meaningEn || searchResult.meaningEn}
+                          </p>
+                        )}
+                      </div>
+
+                      {(searchResult.meanings?.[0]?.examples?.[0] || searchResult.exampleEn) && (
+                        <div className="text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <p className="font-semibold text-text-primary">
+                            "{searchResult.meanings?.[0]?.examples?.[0]?.exampleEn || searchResult.exampleEn}"
+                          </p>
+                          {(searchResult.meanings?.[0]?.examples?.[0]?.exampleVi || searchResult.exampleVi) && (
+                            <p className="text-text-muted mt-0.5">{searchResult.meanings?.[0]?.examples?.[0]?.exampleVi || searchResult.exampleVi}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {user && (
+                        <div className="pt-2 border-t border-gray-100 space-y-3">
+                          <div className="flex flex-wrap gap-1.5">
+                            <button
+                              onClick={handleSave}
+                              disabled={saveMutation.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-pink/10 hover:bg-brand-pink/20 text-brand-pink text-xs font-bold rounded-full transition"
+                            >
+                              <Bookmark className="w-3.5 h-3.5 fill-current" /> Save
+                            </button>
+                            <button
+                              onClick={handleKnown}
+                              disabled={knownMutation.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue text-xs font-bold rounded-full transition"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Known
+                            </button>
+                            <button
+                              onClick={handleDifficult}
+                              disabled={difficultMutation.isPending}
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 text-xs font-bold rounded-full transition"
+                            >
+                              <AlertTriangle className="w-3.5 h-3.5" /> Hard
+                            </button>
+                          </div>
+
+                          {decksData && decksData.myDecks?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-bold text-text-secondary uppercase tracking-wider block">Add to Flashcard Deck</label>
+                              <div className="flex gap-2">
+                                <select
+                                  value={selectedDeckId}
+                                  onChange={(e) => setSelectedDeckId(e.target.value)}
+                                  className="bg-white text-text-primary text-xs rounded-xl px-3 py-1.5 border border-gray-200 outline-none flex-grow focus:ring-2 focus:ring-brand-pink transition"
+                                >
+                                  <option value="">Select deck...</option>
+                                  {decksData.myDecks.map((deck: any) => (
+                                    <option key={deck.id} value={deck.id}>{deck.name}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  onClick={handleAddToDeck}
+                                  disabled={addingToDeck || !selectedDeckId}
+                                  className="p-2 bg-brand-pink text-white rounded-xl hover:bg-brand-pink/90 disabled:opacity-50 transition"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {deckMessage && <p className="text-[10px] font-bold text-brand-pink italic">{deckMessage}</p>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : similarResults.length > 0 ? (
+                    <div className="p-3 space-y-1.5">
+                      <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-1">Similar matches</p>
+                      {similarResults.map((item: any) => (
+                        <button
+                          key={item.id || item._id}
+                          onClick={() => handleSearchImmediate(item.text)}
+                          className="w-full text-left px-3 py-2.5 hover:bg-brand-pink/5 rounded-xl transition group"
+                        >
+                          <span className="font-bold text-text-primary text-sm block group-hover:text-brand-pink transition">{item.text}</span>
+                          <span className="text-xs text-text-secondary line-clamp-1">{item.meanings?.[0]?.meaningVi || 'Chưa có nghĩa'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 space-y-3">
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-text-primary">Not found in dictionary</p>
+                        <p className="text-xs text-text-secondary mt-0.5">Try AI definition for "{searchQuery}"</p>
+                      </div>
+                      {user ? (
+                        <button
+                          onClick={handleAiDefine}
+                          disabled={aiDefineLoading}
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-pink hover:bg-brand-pink/90 text-white font-bold text-xs rounded-xl shadow-pastel transition disabled:opacity-50"
+                        >
+                          <Sparkles className={`w-4 h-4 ${aiDefineLoading ? 'animate-spin' : ''}`} />
+                          {aiDefineLoading ? 'AI is defining...' : 'Define with AI'}
+                        </button>
+                      ) : (
+                        <p className="text-xs italic text-text-secondary text-center">Login to define with AI</p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -417,193 +587,6 @@ export function MainLayout({ children }: MainLayoutProps) {
         </main>
       </div>
 
-      {/* Global Vocabulary Lookup Modal */}
-      {showSearchModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-white w-full max-w-md rounded-3xl shadow-pastel border border-gray-150 p-6 flex flex-col space-y-4 max-h-[90vh] overflow-y-auto">
-            {/* Modal Header */}
-            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <Search className="w-5 h-5 text-brand-pink" />
-                <h3 className="text-lg font-black text-text-primary">Vocabulary Lookup</h3>
-              </div>
-              <button
-                onClick={() => setShowSearchModal(false)}
-                className="text-text-secondary hover:text-text-primary p-1 bg-gray-50 hover:bg-gray-100 rounded-full transition"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            {searchLoading ? (
-              <div className="py-8 flex flex-col items-center justify-center space-y-4">
-                <div className="w-12 h-12 border-4 border-brand-pink border-t-transparent rounded-full animate-spin"></div>
-                <p className="text-xs font-bold text-text-secondary">Searching dictionary database...</p>
-              </div>
-            ) : searchResult ? (
-              /* If a word was found or defined */
-              <div className="space-y-4">
-                <div className="bg-slate-50 border border-slate-100 p-5 rounded-3xl space-y-3.5">
-                  <div className="flex justify-between items-start gap-4">
-                    <div>
-                      <h4 className="text-2xl font-black text-brand-pink leading-none">{searchResult.text}</h4>
-                      <p className="text-[10px] text-text-muted font-extrabold uppercase tracking-wider mt-2.5">
-                        {searchResult.type?.replace('_', ' ')} {searchResult.level ? `· ${searchResult.level}` : ''}
-                      </p>
-                    </div>
-                    {searchResult.partOfSpeech && (
-                      <span className="text-[9px] bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                        {searchResult.partOfSpeech}
-                      </span>
-                    )}
-                  </div>
-
-                  {searchResult.phonetic && (
-                    <p className="text-xs text-text-muted font-bold tracking-wide">{searchResult.phonetic}</p>
-                  )}
-
-                  <div className="py-3 border-t border-b border-gray-200/50 my-1 space-y-1 text-sm">
-                    <p className="font-bold text-text-primary text-base leading-snug">
-                      {searchResult.meanings?.[0]?.meaningVi || searchResult.meaningVi || 'Chưa có nghĩa'}
-                    </p>
-                    {(searchResult.meanings?.[0]?.meaningEn || searchResult.meaningEn) && (
-                      <p className="text-xs text-text-secondary italic">
-                        {searchResult.meanings?.[0]?.meaningEn || searchResult.meaningEn}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Examples */}
-                  {(searchResult.meanings?.[0]?.examples?.[0] || searchResult.exampleEn) && (
-                    <div className="text-xs bg-white p-3.5 rounded-2xl border border-slate-100 shadow-soft">
-                      <p className="font-semibold text-text-primary">
-                        "{searchResult.meanings?.[0]?.examples?.[0]?.exampleEn || searchResult.exampleEn}"
-                      </p>
-                      {(searchResult.meanings?.[0]?.examples?.[0]?.exampleVi || searchResult.exampleVi) && (
-                        <p className="text-text-muted mt-1 font-medium">
-                          {searchResult.meanings?.[0]?.examples?.[0]?.exampleVi || searchResult.exampleVi}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Actions for Logged in Users */}
-                  {user && (
-                    <div className="pt-3 border-t border-gray-200/50 space-y-4">
-                      <div className="flex flex-wrap gap-2 justify-center">
-                        <button
-                          onClick={handleSave}
-                          disabled={saveMutation.isPending}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-brand-pink/15 hover:bg-brand-pink/25 text-brand-pink text-xs font-bold rounded-full transition duration-150"
-                        >
-                          <Bookmark className="w-4 h-4 fill-current" />
-                          Save
-                        </button>
-                        <button
-                          onClick={handleKnown}
-                          disabled={knownMutation.isPending}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-brand-blue/15 hover:bg-brand-blue/25 text-brand-blue text-xs font-bold rounded-full transition duration-150"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          Known
-                        </button>
-                        <button
-                          onClick={handleDifficult}
-                          disabled={difficultMutation.isPending}
-                          className="flex items-center gap-1.5 px-3.5 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 text-xs font-bold rounded-full transition duration-150"
-                        >
-                          <AlertTriangle className="w-4 h-4" />
-                          Hard
-                        </button>
-                      </div>
-
-                      {/* Add to Deck */}
-                      {decksData && decksData.myDecks?.length > 0 && (
-                        <div className="space-y-1.5 text-left">
-                          <label className="text-[10px] font-bold text-text-secondary uppercase tracking-wider block">Add to Flashcard Deck</label>
-                          <div className="flex gap-2">
-                            <select
-                              value={selectedDeckId}
-                              onChange={(e) => setSelectedDeckId(e.target.value)}
-                              className="bg-white text-text-primary text-xs rounded-xl px-3 py-2 border border-gray-200 outline-none flex-grow focus:ring-2 focus:ring-brand-pink transition font-medium"
-                            >
-                              <option value="">Select deck...</option>
-                              {decksData.myDecks.map((deck: any) => (
-                                <option key={deck.id} value={deck.id}>
-                                  {deck.name}
-                                </option>
-                              ))}
-                            </select>
-                            <button
-                              onClick={handleAddToDeck}
-                              disabled={addingToDeck || !selectedDeckId}
-                              className="p-2.5 bg-brand-pink text-white rounded-xl hover:bg-brand-pink/90 disabled:opacity-50 transition-all-180 hover:scale-105 active:scale-95"
-                            >
-                              <Plus className="w-4 h-4" />
-                            </button>
-                          </div>
-                          {deckMessage && (
-                            <p className="text-[10px] font-bold text-brand-pink italic animate-fade-in">{deckMessage}</p>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              /* Word not found */
-              <div className="space-y-4">
-                {similarResults.length > 0 ? (
-                  <div className="space-y-2.5">
-                    <p className="text-xs font-semibold text-text-secondary">Word/phrase not found. Similar dictionary matches:</p>
-                    <div className="grid gap-2 max-h-40 overflow-y-auto pr-1">
-                      {similarResults.map((item: any) => (
-                        <button
-                          key={item.id || item._id}
-                          onClick={() => handleSearchImmediate(item.text)}
-                          className="w-full text-left p-3 bg-slate-50 hover:bg-brand-pink/5 border border-slate-100 hover:border-brand-pink/20 rounded-2xl transition duration-150"
-                        >
-                          <span className="font-bold text-text-primary text-sm block">{item.text}</span>
-                          <span className="text-xs text-text-secondary block mt-0.5 line-clamp-1">
-                            {item.meanings?.[0]?.meaningVi || 'Chưa có nghĩa'}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-4 space-y-2">
-                    <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
-                    <p className="text-xs font-bold text-text-primary">No matching words or phrases found in database.</p>
-                  </div>
-                )}
-
-                {/* AI definition CTA */}
-                {user ? (
-                  <div className="pt-3 border-t border-gray-100 flex flex-col items-center gap-3">
-                    <div className="text-center space-y-1">
-                      <p className="text-xs font-bold text-text-primary">Need a definition?</p>
-                      <p className="text-[10px] text-text-secondary">Let DeepSeek AI translate and define "{searchQuery}" for you instantly.</p>
-                    </div>
-                    <button
-                      onClick={handleAiDefine}
-                      disabled={aiDefineLoading}
-                      className="flex items-center gap-2 px-6 py-3.5 bg-brand-pink hover:bg-brand-pink/95 text-white font-extrabold text-xs rounded-full shadow-pastel hover:scale-[1.01] active:scale-[0.99] transition duration-200 w-full justify-center disabled:opacity-50"
-                    >
-                      <Sparkles className={`w-4 h-4 ${aiDefineLoading ? 'animate-spin' : ''}`} />
-                      {aiDefineLoading ? 'AI is defining...' : 'Define with DeepSeek AI'}
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-xs italic text-text-secondary text-center">Login to look up definitions with AI</p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -59,9 +59,7 @@ export function ForgotPasswordPage() {
           <div className="w-16 h-16 rounded-full bg-brand-pink/20 flex items-center justify-center p-1 border border-brand-pink/15 shadow-sm">
             <img src="/bunny_reading.png" className="w-full h-full object-contain rounded-full" alt="Mascot Logo" />
           </div>
-          <span className="font-extrabold text-lg text-text-primary tracking-tight">
-            Aura<span className="text-brand-pink">English</span>
-          </span>
+          <span className="font-extrabold text-lg text-brand-pink tracking-tight">Hagu</span>
           <p className="text-[9px] text-text-muted font-bold tracking-widest uppercase -mt-2">SRS & Readings</p>
         </div>
 
