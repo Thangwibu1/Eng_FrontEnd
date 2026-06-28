@@ -91,11 +91,12 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
   };
 
-  const handleSearch = async (query: string) => {
+  const debounceTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+
+  const performSearch = async (query: string) => {
     const trimmed = query.trim();
     if (!trimmed) return;
-    
-    setSearchQuery(trimmed);
+
     setShowSearchModal(true);
     setSearchLoading(true);
     setSearchResult(null);
@@ -125,6 +126,43 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
   };
 
+  // Trigger search whenever searchQuery changes (debounced)
+  React.useEffect(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      performSearch(trimmed);
+    }, 450);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [searchQuery]);
+
+  const handleSearchImmediate = (query: string) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    setSearchQuery(query);
+    performSearch(query);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchImmediate(searchQuery);
+    }
+  };
+
   const handleAiDefine = async () => {
     setAiDefineLoading(true);
     setDeckMessage('');
@@ -135,12 +173,6 @@ export function MainLayout({ children }: MainLayoutProps) {
       alert(err.response?.data?.error?.message || 'AI definition failed.');
     } finally {
       setAiDefineLoading(false);
-    }
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleSearch(searchQuery);
     }
   };
 
@@ -194,10 +226,9 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Sidebar */}
       <aside className="w-64 h-screen bg-white border-r border-gray-100/80 flex flex-col justify-between p-6 shrink-0 hidden md:flex shadow-soft sticky top-0">
         <div className="space-y-6">
-          {/* Logo Branding */}
           <Link to="/" className="flex items-center gap-2.5 px-2 group">
-            <div className="w-10 h-10 bg-brand-pink rounded-2xl flex items-center justify-center shadow-pastel group-hover:scale-105 transition duration-200">
-              <Sparkles className="w-5.5 h-5.5 text-white animate-pulse" />
+            <div className="w-10 h-10 bg-brand-pink/10 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-105 transition duration-200">
+              <img src="/bunny_reading.png" className="w-7 h-7 object-contain" alt="Logo" />
             </div>
             <div>
               <span className="font-extrabold text-xl tracking-tight text-text-primary">
@@ -297,10 +328,9 @@ export function MainLayout({ children }: MainLayoutProps) {
         <header className="bg-white border-b border-gray-100/80 h-16 px-6 flex items-center justify-between shrink-0 z-10 shadow-sm">
           {/* Left Area: Mobile logo + Search Input */}
           <div className="flex items-center gap-4 flex-grow max-w-lg">
-            {/* Logo on Mobile only */}
             <Link to="/" className="flex items-center gap-2 md:hidden shrink-0">
-              <div className="w-8 h-8 bg-brand-pink rounded-xl flex items-center justify-center shadow-pastel">
-                <Sparkles className="w-4 h-4 text-white" />
+              <div className="w-8 h-8 bg-brand-pink/10 rounded-xl flex items-center justify-center shadow-sm">
+                <img src="/bunny_reading.png" className="w-5.5 h-5.5 object-contain" alt="Logo" />
               </div>
               <span className="font-extrabold text-lg text-text-primary hidden sm:inline-block">AuraEnglish</span>
             </Link>
@@ -532,7 +562,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                       {similarResults.map((item: any) => (
                         <button
                           key={item.id || item._id}
-                          onClick={() => handleSearch(item.text)}
+                          onClick={() => handleSearchImmediate(item.text)}
                           className="w-full text-left p-3 bg-slate-50 hover:bg-brand-pink/5 border border-slate-100 hover:border-brand-pink/20 rounded-2xl transition duration-150"
                         >
                           <span className="font-bold text-text-primary text-sm block">{item.text}</span>
