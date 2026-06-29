@@ -143,7 +143,7 @@ export function SelectableReadingText({
   return (
     <div
       onMouseUp={handleMouseUp}
-      className="p-6 md:p-8 bg-white rounded-3xl border border-gray-150 shadow-soft font-serif text-lg leading-relaxed text-text-primary whitespace-pre-wrap select-text selection:bg-brand-pink/20 focus:outline-none"
+      className="p-6 md:p-8 bg-white rounded-3xl border border-gray-150 shadow-soft font-sans text-lg leading-relaxed text-text-primary whitespace-pre-wrap select-text selection:bg-brand-pink/20 focus:outline-none"
       style={{ minHeight: '300px' }}
     >
       {segments.map((segment, idx) => {
