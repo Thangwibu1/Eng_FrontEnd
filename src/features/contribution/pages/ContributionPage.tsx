@@ -20,6 +20,90 @@ import {
 import { useAnalyzeContributionReadingAi } from '../hooks/useAnalyzeContributionReadingAi';
 import { AiSuggestionEditor } from '../components/AiSuggestionEditor';
 
+import { useLookupVocabulary } from '../hooks/useLookupVocabulary';
+import { SelectableReadingText } from '../components/SelectableReadingText';
+import { SelectionToolbar } from '../components/SelectionToolbar';
+import { DictionaryLookupPopover } from '../components/DictionaryLookupPopover';
+import { ManualVocabularyFormModal } from '../components/ManualVocabularyFormModal';
+import { AnnotationListPanel } from '../components/AnnotationListPanel';
+
+function normalizeText(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize('NFKC')
+    .replace(/[’‘]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function computeAllAnnotations(
+  content: string,
+  aiSuggestions: any[],
+  manualMatched: any[],
+  manualMissing: any[]
+) {
+  const manualList = [...manualMatched, ...manualMissing];
+  const occupiedRanges = manualList.map((item) => ({
+    start: item.start,
+    end: item.end,
+  }));
+
+  const annotations = [...manualList];
+
+  const addAnnotationIfNoOverlap = (start: number, end: number, sugg: any) => {
+    const overlap = occupiedRanges.some((r) => start < r.end && end > r.start);
+    if (!overlap) {
+      annotations.push({
+        ...sugg,
+        start,
+        end,
+      });
+      occupiedRanges.push({ start, end });
+      return true;
+    }
+    return false;
+  };
+
+  // Sort AI suggestions by text length descending
+  const sortedAiSuggs = [...aiSuggestions].sort((a, b) => {
+    const textA = a.suggestedVocabulary?.text || a.text || '';
+    const textB = b.suggestedVocabulary?.text || b.text || '';
+    return textB.length - textA.length;
+  });
+
+  for (const sugg of sortedAiSuggs) {
+    const suggText = sugg.suggestedVocabulary?.text || sugg.text || '';
+    const suggNorm = normalizeText(suggText);
+    if (!suggNorm) continue;
+
+    // Check if duplicate exists in manual (by normalizedText)
+    const duplicateInManual = manualList.some(
+      (m) => normalizeText(m.text) === suggNorm
+    );
+    if (duplicateInManual) continue;
+
+    // Search for occurrences in content
+    const escapedText = suggText.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const regexStr = `\\b${escapedText}\\b`;
+    let regex: RegExp;
+    try {
+      regex = new RegExp(regexStr, 'gi');
+    } catch (e) {
+      regex = new RegExp(escapedText, 'gi');
+    }
+
+    let match;
+    while ((match = regex.exec(content)) !== null) {
+      const start = match.index;
+      const end = start + match[0].length;
+      addAnnotationIfNoOverlap(start, end, sugg);
+    }
+  }
+
+  return annotations.sort((a, b) => a.start - b.start);
+}
+
 export function ContributionPage() {
   const { data: user } = useMe();
   const queryClient = useQueryClient();
@@ -42,6 +126,18 @@ export function ContributionPage() {
   const [readingTime, setReadingTime] = useState(5);
   const [aiSuggestions, setAiSuggestions] = useState<any[]>([]);
   const [aiAssisted, setAiAssisted] = useState(false);
+
+  // Manual Annotation States
+  const [manualMatchedItems, setManualMatchedItems] = useState<any[]>([]);
+  const [manualMissingItems, setManualMissingItems] = useState<any[]>([]);
+  const [selectedRange, setSelectedRange] = useState<{ text: string; start: number; end: number; rect: DOMRect } | null>(null);
+  const [currentSelectionRange, setCurrentSelectionRange] = useState<{ text: string; start: number; end: number } | null>(null);
+  const [lookupResult, setLookupResult] = useState<any | null>(null);
+  const [isLookupOpen, setIsLookupOpen] = useState(false);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [readingMode, setReadingMode] = useState<'edit' | 'annotate'>('edit');
+
+  const lookupMutation = useLookupVocabulary();
 
   // Admin Topic States
   const [newTopicName, setNewTopicName] = useState('');
@@ -114,6 +210,9 @@ export function ContributionPage() {
       setReadingTime(5);
       setAiSuggestions([]);
       setAiAssisted(false);
+      setManualMatchedItems([]);
+      setManualMissingItems([]);
+      setReadingMode('edit');
       setActiveTab('my');
       setTimeout(() => setSubmitMessage(''), 5000);
     },
@@ -204,10 +303,12 @@ export function ContributionPage() {
       aiAssisted,
       aiMatchedItems,
       aiMissingItems,
+      manualMatchedItems,
+      manualMissingItems,
       suggestedVocabularyItems: aiSuggestions,
     };
     submitMutation.mutate({
-      type: aiAssisted ? 'reading_with_ai_vocabulary' : 'reading',
+      type: (aiAssisted || manualMissingItems.length > 0) ? 'reading_with_ai_vocabulary' : 'reading',
       action: 'create',
       payload
     });
@@ -501,104 +602,316 @@ export function ContributionPage() {
 
       {/* Tab 3: New Reading Form */}
       {activeTab === 'new-reading' && (
-        <section className="bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-soft max-w-2xl mx-auto">
-          <form onSubmit={handleReadingSubmit} className="space-y-6">
-            <h3 className="text-2xl font-black text-text-primary flex items-center gap-2">
-              <BookOpen className="w-6 h-6 text-brand-pink" />
-              Contribute Reading Article
-            </h3>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Title</label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. The Science of Memory"
-                value={readingTitle}
-                onChange={(e) => setReadingTitle(e.target.value)}
-                className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Subtitle (Short Summary)</label>
-              <input
-                type="text"
-                placeholder="e.g. How repetition helps solidify schemas in human neurons."
-                value={readingSubtitle}
-                onChange={(e) => setReadingSubtitle(e.target.value)}
-                className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition"
-              />
-            </div>
-
-            <div className="grid gap-6 sm:grid-cols-2">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">CEFR level</label>
-                <select
-                  value={readingLevel}
-                  onChange={(e) => setReadingLevel(e.target.value)}
-                  className="w-full h-11 px-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-text-primary text-sm font-medium focus:bg-white focus:border-brand-pink"
-                >
-                  <option value="A1">A1 - Beginner</option>
-                  <option value="A2">A2 - Elementary</option>
-                  <option value="B1">B1 - Intermediate</option>
-                  <option value="B2">B2 - Upper Intermediate</option>
-                  <option value="C1">C1 - Advanced</option>
-                  <option value="C2">C2 - Mastery</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Est. Time (minutes)</label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  value={readingTime}
-                  onChange={(e) => setReadingTime(Number(e.target.value))}
-                  className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Article Body Text</label>
-              <textarea
-                required
-                placeholder="Write the full English article text here. Note: Words that match the dictionary will be clickable automatically once preprocessed."
-                value={readingBody}
-                onChange={(e) => setReadingBody(e.target.value)}
-                className="w-full h-48 p-4 bg-slate-50 border border-slate-100 rounded-3xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition resize-none leading-relaxed"
-              />
-            </div>
-
-            <div className="flex justify-end pt-1">
-              <button
-                type="button"
-                onClick={handleAiAnalyzeReading}
-                disabled={analyzeAiMutation.isPending || readingBody.trim().length < 50}
-                className="flex items-center gap-2 px-5 py-2.5 bg-brand-pink/10 hover:bg-brand-pink/15 text-brand-pink font-extrabold text-xs rounded-full transition disabled:opacity-50"
+        <div className="space-y-6">
+          {readingMode === 'edit' ? (
+            <section className="bg-white rounded-3xl border border-gray-100 p-6 md:p-8 shadow-soft max-w-2xl mx-auto">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!readingTitle.trim() || !readingBody.trim()) {
+                    alert('Please fill in title and body text.');
+                    return;
+                  }
+                  setReadingMode('annotate');
+                }}
+                className="space-y-6"
               >
-                <Sparkles className={`w-4 h-4 ${analyzeAiMutation.isPending ? 'animate-spin' : ''}`} />
-                {analyzeAiMutation.isPending ? 'Analyzing vocabulary...' : 'Use AI to analyze vocabulary'}
-              </button>
-            </div>
+                <h3 className="text-2xl font-black text-text-primary flex items-center gap-2">
+                  <BookOpen className="w-6 h-6 text-brand-pink" />
+                  Contribute Reading Article
+                </h3>
 
-            {aiAssisted && (
-              <div className="border-t border-gray-50 pt-4">
-                <AiSuggestionEditor items={aiSuggestions} onChange={setAiSuggestions} />
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. The Science of Memory"
+                    value={readingTitle}
+                    onChange={(e) => setReadingTitle(e.target.value)}
+                    className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Subtitle (Short Summary)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. How repetition helps solidify schemas in human neurons."
+                    value={readingSubtitle}
+                    onChange={(e) => setReadingSubtitle(e.target.value)}
+                    className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition"
+                  />
+                </div>
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">CEFR level</label>
+                    <select
+                      value={readingLevel}
+                      onChange={(e) => setReadingLevel(e.target.value)}
+                      className="w-full h-11 px-3 bg-slate-50 border border-slate-100 rounded-2xl outline-none text-text-primary text-sm font-medium focus:bg-white focus:border-brand-pink"
+                    >
+                      <option value="A1">A1 - Beginner</option>
+                      <option value="A2">A2 - Elementary</option>
+                      <option value="B1">B1 - Intermediate</option>
+                      <option value="B2">B2 - Upper Intermediate</option>
+                      <option value="C1">C1 - Advanced</option>
+                      <option value="C2">C2 - Mastery</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Est. Time (minutes)</label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={readingTime}
+                      onChange={(e) => setReadingTime(Number(e.target.value))}
+                      className="w-full h-11 px-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-text-secondary uppercase tracking-wider block">Article Body Text</label>
+                  <textarea
+                    required
+                    placeholder="Write the full English article text here. Note: Words that match the dictionary will be clickable automatically once preprocessed."
+                    value={readingBody}
+                    onChange={(e) => setReadingBody(e.target.value)}
+                    className="w-full h-48 p-4 bg-slate-50 border border-slate-100 rounded-3xl outline-none focus:border-brand-pink focus:bg-white text-text-primary text-sm font-medium transition resize-none leading-relaxed"
+                  />
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={handleAiAnalyzeReading}
+                    disabled={analyzeAiMutation.isPending || readingBody.trim().length < 50}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-brand-pink/10 hover:bg-brand-pink/15 text-brand-pink font-extrabold text-xs rounded-full transition disabled:opacity-50"
+                  >
+                    <Sparkles className={`w-4 h-4 ${analyzeAiMutation.isPending ? 'animate-spin' : ''}`} />
+                    {analyzeAiMutation.isPending ? 'Analyzing vocabulary...' : 'Use AI to analyze vocabulary'}
+                  </button>
+                </div>
+
+                {aiAssisted && (
+                  <div className="border-t border-gray-50 pt-4">
+                    <AiSuggestionEditor items={aiSuggestions} onChange={setAiSuggestions} />
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-brand-pink text-white font-extrabold rounded-full shadow-pastel hover:bg-brand-pink/90 hover:scale-[1.01] active:scale-[0.99] transition-all-180 text-sm"
+                >
+                  Preview & Annotate
+                </button>
+              </form>
+            </section>
+          ) : (
+            <section className="space-y-6 max-w-5xl mx-auto">
+              <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-gray-100 shadow-soft">
+                <div className="space-y-1">
+                  <h4 className="font-extrabold text-base text-text-primary">Annotating: {readingTitle}</h4>
+                  <p className="text-xs text-text-secondary">Level: {readingLevel} · Highlight text in preview to annotate manually.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReadingMode('edit')}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-text-secondary font-bold text-xs rounded-full transition"
+                >
+                  Back to Edit
+                </button>
               </div>
-            )}
 
-            <button
-              type="submit"
-              disabled={submitMutation.isPending}
-              className="w-full py-3.5 bg-brand-pink text-white font-extrabold rounded-full shadow-pastel hover:bg-brand-pink/90 hover:scale-[1.01] active:scale-[0.99] transition-all-180"
-            >
-              {submitMutation.isPending ? 'Submitting...' : 'Submit Reading Article'}
-            </button>
-          </form>
-        </section>
+              <div className="grid gap-6 lg:grid-cols-3">
+                <div className="lg:col-span-2 space-y-4">
+                  <SelectableReadingText
+                    content={readingBody}
+                    annotations={computeAllAnnotations(
+                      readingBody,
+                      aiSuggestions,
+                      manualMatchedItems,
+                      manualMissingItems
+                    )}
+                    onTextSelect={(range) => {
+                      const cleanStart = range.start;
+                      const cleanEnd = range.end;
+                      const hasOverlapWithManual = [...manualMatchedItems, ...manualMissingItems].some((ann) => {
+                        return cleanStart < ann.end && cleanEnd > ann.start;
+                      });
+
+                      if (hasOverlapWithManual) {
+                        alert("Selection overlaps with an existing manual annotation.");
+                        window.getSelection()?.removeAllRanges();
+                        return;
+                      }
+
+                      setSelectedRange(range);
+                      setCurrentSelectionRange({
+                        text: range.text,
+                        start: range.start,
+                        end: range.end,
+                      });
+                    }}
+                  />
+                </div>
+
+                <div className="lg:col-span-1 space-y-4">
+                  <AnnotationListPanel
+                    manualMatched={manualMatchedItems}
+                    manualMissing={manualMissingItems}
+                    aiSuggestions={aiSuggestions}
+                    onRemoveManualMatched={(idx) => {
+                      setManualMatchedItems((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    onRemoveManualMissing={(idx) => {
+                      setManualMissingItems((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                    onRemoveAiSuggestion={(idx) => {
+                      setAiSuggestions((prev) => prev.filter((_, i) => i !== idx));
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    onClick={handleReadingSubmit}
+                    disabled={submitMutation.isPending}
+                    className="w-full py-4 bg-brand-pink text-white font-extrabold rounded-full shadow-pastel hover:bg-brand-pink/90 active:scale-[0.98] transition text-sm"
+                  >
+                    {submitMutation.isPending ? 'Submitting...' : 'Submit Contribution'}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Floating Selection Toolbar */}
+          <SelectionToolbar
+            rect={selectedRange ? selectedRange.rect : null}
+            onLookup={async () => {
+              if (!selectedRange) return;
+              try {
+                const res = await lookupMutation.mutateAsync({ text: selectedRange.text });
+                if (res.status === 'matched') {
+                  setLookupResult(res);
+                  setIsLookupOpen(true);
+                } else {
+                  setLookupResult(res);
+                  setIsFormModalOpen(true);
+                }
+              } catch (err) {
+                alert('Dictionary lookup failed.');
+              } finally {
+                setSelectedRange(null);
+              }
+            }}
+            onAddManually={async () => {
+              if (!selectedRange) return;
+              try {
+                const res = await lookupMutation.mutateAsync({ text: selectedRange.text });
+                setLookupResult(res);
+                setIsFormModalOpen(true);
+              } catch (err) {
+                setLookupResult({ status: 'missing', suggestions: [] });
+                setIsFormModalOpen(true);
+              } finally {
+                setSelectedRange(null);
+              }
+            }}
+            onCancel={() => {
+              setSelectedRange(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+          />
+
+          {/* Lookup Popover */}
+          <DictionaryLookupPopover
+            isOpen={isLookupOpen}
+            onClose={() => {
+              setIsLookupOpen(false);
+              setLookupResult(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            vocabulary={lookupResult ? lookupResult.vocabulary : null}
+            onConfirm={() => {
+              if (!lookupResult || !lookupResult.vocabulary || !currentSelectionRange) return;
+              setManualMatchedItems((prev) => [
+                ...prev,
+                {
+                  source: 'manual',
+                  status: 'matched',
+                  text: currentSelectionRange.text,
+                  normalizedText: normalizeText(currentSelectionRange.text),
+                  start: currentSelectionRange.start,
+                  end: currentSelectionRange.end,
+                  vocabularyId: lookupResult.vocabulary.id,
+                  matchMethod: 'normalized_text',
+                  type: lookupResult.vocabulary.type,
+                  level: lookupResult.vocabulary.level,
+                },
+              ]);
+              setIsLookupOpen(false);
+              setLookupResult(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+          />
+
+          {/* Manual Vocabulary Modal */}
+          <ManualVocabularyFormModal
+            isOpen={isFormModalOpen}
+            onClose={() => {
+              setIsFormModalOpen(false);
+              setLookupResult(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            selectedText={currentSelectionRange ? currentSelectionRange.text : ''}
+            suggestions={lookupResult ? lookupResult.suggestions : []}
+            topicsList={topics || []}
+            onChooseSuggestion={(vocab) => {
+              if (!currentSelectionRange) return;
+              setManualMatchedItems((prev) => [
+                ...prev,
+                {
+                  source: 'manual',
+                  status: 'matched',
+                  text: currentSelectionRange.text,
+                  normalizedText: normalizeText(currentSelectionRange.text),
+                  start: currentSelectionRange.start,
+                  end: currentSelectionRange.end,
+                  vocabularyId: vocab.id,
+                  matchMethod: 'selected_suggestion',
+                  type: vocab.type,
+                  level: vocab.level,
+                },
+              ]);
+              setIsFormModalOpen(false);
+              setLookupResult(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+            onSave={(suggestedVocabulary) => {
+              if (!currentSelectionRange) return;
+              setManualMissingItems((prev) => [
+                ...prev,
+                {
+                  source: 'manual',
+                  status: 'missing',
+                  text: currentSelectionRange.text,
+                  normalizedText: normalizeText(currentSelectionRange.text),
+                  start: currentSelectionRange.start,
+                  end: currentSelectionRange.end,
+                  suggestedVocabulary,
+                },
+              ]);
+              setIsFormModalOpen(false);
+              setLookupResult(null);
+              window.getSelection()?.removeAllRanges();
+            }}
+          />
+        </div>
       )}
 
       {/* Tab 4: Admin pending reviews */}
@@ -758,6 +1071,60 @@ export function ContributionPage() {
                                   </div>
                                 </div>
                               )}
+
+                              {payload.manualMatchedItems && payload.manualMatchedItems.length > 0 && (
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest block">Manually Matched Vocabulary ({payload.manualMatchedItems.length})</span>
+                                  <div className="bg-white border border-gray-150 rounded-2xl overflow-hidden divide-y divide-gray-50 max-h-40 overflow-y-auto">
+                                    {payload.manualMatchedItems.map((v: any, idx: number) => {
+                                      const word = v.text;
+                                      const meaning = v.meaningVi || `(id: ${v.vocabularyId})`;
+                                      const level = v.level || 'A1';
+                                      return (
+                                        <div key={idx} className="p-3 flex justify-between items-start gap-4 hover:bg-slate-50/50 transition text-xs">
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <p className="font-bold text-brand-pink">{word}</p>
+                                              <span className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold">{level}</span>
+                                              <span className="text-[9px] text-text-muted capitalize">({v.type?.replace('_', ' ') || 'vocabulary'})</span>
+                                            </div>
+                                            <p className="font-semibold text-text-primary">{meaning}</p>
+                                            <p className="text-[8px] text-text-muted">Offset: [{v.start}-{v.end}] · Method: {v.matchMethod}</p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {payload.manualMissingItems && payload.manualMissingItems.length > 0 && (
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest block">Manually Added Vocabulary ({payload.manualMissingItems.length})</span>
+                                  <div className="bg-white border border-gray-150 rounded-2xl overflow-hidden divide-y divide-gray-50 max-h-40 overflow-y-auto">
+                                    {payload.manualMissingItems.map((v: any, idx: number) => {
+                                      const sv = v.suggestedVocabulary || {};
+                                      return (
+                                        <div key={idx} className="p-3 flex justify-between items-start gap-4 hover:bg-slate-50/50 transition text-xs">
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <p className="font-bold text-brand-pink">{sv.text || v.text}</p>
+                                              {sv.level && <span className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold">{sv.level}</span>}
+                                              <span className="text-[9px] text-text-muted capitalize">({sv.type?.replace('_', ' ') || 'vocabulary'})</span>
+                                            </div>
+                                            <p className="font-semibold text-text-primary">{sv.meaningVi || 'Chưa có nghĩa'}</p>
+                                            {sv.partOfSpeech && <p className="text-[9px] text-text-muted">Part of Speech: {sv.partOfSpeech}</p>}
+                                            {sv.exampleEn && (
+                                              <p className="text-[9px] text-text-secondary italic">"{sv.exampleEn}"</p>
+                                            )}
+                                            <p className="text-[8px] text-text-muted">Offset: [{v.start}-{v.end}]</p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
@@ -909,6 +1276,59 @@ export function ContributionPage() {
                                             {sv.exampleEn && (
                                               <p className="text-[9px] text-text-secondary italic">"{sv.exampleEn}"</p>
                                             )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                              {payload.manualMatchedItems && payload.manualMatchedItems.length > 0 && (
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest block">Manually Matched Vocabulary ({payload.manualMatchedItems.length})</span>
+                                  <div className="bg-white border border-gray-150 rounded-2xl overflow-hidden divide-y divide-gray-50 max-h-40 overflow-y-auto">
+                                    {payload.manualMatchedItems.map((v: any, idx: number) => {
+                                      const word = v.text;
+                                      const meaning = v.meaningVi || `(id: ${v.vocabularyId})`;
+                                      const level = v.level || 'A1';
+                                      return (
+                                        <div key={idx} className="p-3 flex justify-between items-start gap-4 hover:bg-slate-50/50 transition text-xs">
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <p className="font-bold text-brand-pink">{word}</p>
+                                              <span className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold">{level}</span>
+                                              <span className="text-[9px] text-text-muted capitalize">({v.type?.replace('_', ' ') || 'vocabulary'})</span>
+                                            </div>
+                                            <p className="font-semibold text-text-primary">{meaning}</p>
+                                            <p className="text-[8px] text-text-muted">Offset: [{v.start}-{v.end}] · Method: {v.matchMethod}</p>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {payload.manualMissingItems && payload.manualMissingItems.length > 0 && (
+                                <div className="space-y-2">
+                                  <span className="text-[10px] font-bold text-amber-600 uppercase tracking-widest block">Manually Added Vocabulary ({payload.manualMissingItems.length})</span>
+                                  <div className="bg-white border border-gray-150 rounded-2xl overflow-hidden divide-y divide-gray-50 max-h-40 overflow-y-auto">
+                                    {payload.manualMissingItems.map((v: any, idx: number) => {
+                                      const sv = v.suggestedVocabulary || {};
+                                      return (
+                                        <div key={idx} className="p-3 flex justify-between items-start gap-4 hover:bg-slate-50/50 transition text-xs">
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <p className="font-bold text-brand-pink">{sv.text || v.text}</p>
+                                              {sv.level && <span className="text-[9px] bg-slate-100 text-slate-700 px-1.5 py-0.2 rounded font-bold">{sv.level}</span>}
+                                              <span className="text-[9px] text-text-muted capitalize">({sv.type?.replace('_', ' ') || 'vocabulary'})</span>
+                                            </div>
+                                            <p className="font-semibold text-text-primary">{sv.meaningVi || 'Chưa có nghĩa'}</p>
+                                            {sv.partOfSpeech && <p className="text-[9px] text-text-muted">Part of Speech: {sv.partOfSpeech}</p>}
+                                            {sv.exampleEn && (
+                                              <p className="text-[9px] text-text-secondary italic">"{sv.exampleEn}"</p>
+                                            )}
+                                            <p className="text-[8px] text-text-muted">Offset: [{v.start}-{v.end}]</p>
                                           </div>
                                         </div>
                                       );
