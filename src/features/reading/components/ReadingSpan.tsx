@@ -53,13 +53,21 @@ export function ReadingSpan({ readingId, span, vocabulary, isOpen, onOpenChange 
   };
 
   return (
-    <span className="relative inline-block">
-      <button
+    <span className="relative inline">
+      <span
+        role="button"
+        tabIndex={0}
         onClick={handleSpanClick}
-        className={`px-0.5 rounded-lg font-bold transition-all duration-150 cursor-pointer select-text ${getHighlightClass(vocabulary.type)}`}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleSpanClick();
+          }
+        }}
+        className={`px-0.5 rounded font-bold transition-all duration-150 cursor-pointer select-text ${getHighlightClass(vocabulary.type)}`}
       >
         {span.text}
-      </button>
+      </span>
 
       {isOpen && (
         <VocabularyPopover
