@@ -40,6 +40,16 @@ const getMeaningEn = (item: any) =>
   || item?.meaningEn?.trim()
   || '';
 
+const getExample = (item: any) => {
+  const nestedExample = item?.meanings
+    ?.flatMap((meaning: any) => meaning?.examples || [])
+    ?.find((example: any) => example?.exampleEn?.trim() || example?.exampleVi?.trim());
+
+  return nestedExample || (item?.exampleEn || item?.exampleVi
+    ? { exampleEn: item.exampleEn, exampleVi: item.exampleVi }
+    : null);
+};
+
 export function MainLayout({ children }: MainLayoutProps) {
   const { data: user } = useMe();
   const navigate = useNavigate();
@@ -114,6 +124,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const debounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNextSearchRef = React.useRef(false);
+  const selectedVocabularyIdRef = React.useRef<string | null>(null);
 
   const performSearch = async (query: string) => {
     const trimmed = query.trim();
@@ -121,6 +132,7 @@ export function MainLayout({ children }: MainLayoutProps) {
 
     setShowSearchDropdown(true);
     setSearchLoading(true);
+    selectedVocabularyIdRef.current = null;
     setSearchResult(null);
     setSimilarResults([]);
     setDeckMessage('');
@@ -178,7 +190,7 @@ export function MainLayout({ children }: MainLayoutProps) {
     performSearch(query);
   };
 
-  const handleSelectSearchResult = (item: any) => {
+  const handleSelectSearchResult = async (item: any) => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
@@ -192,6 +204,19 @@ export function MainLayout({ children }: MainLayoutProps) {
     setShowSearchDropdown(true);
     setDeckMessage('');
     setSelectedDeckId('');
+
+    const vocabularyId = item.id || item._id;
+    selectedVocabularyIdRef.current = vocabularyId;
+    if (!vocabularyId) return;
+
+    try {
+      const res = await httpClient.get(`/vocabularies/${vocabularyId}`);
+      if (selectedVocabularyIdRef.current !== vocabularyId) return;
+      setSearchResult(res.data.data?.vocabulary || res.data.data || item);
+    } catch (err) {
+      console.error(err);
+      // The search result still provides a useful fallback if detail loading fails.
+    }
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -271,7 +296,7 @@ export function MainLayout({ children }: MainLayoutProps) {
               <span className="font-extrabold text-xl tracking-tight text-text-primary">
                 <span className="text-brand-pink">Hagu</span>
               </span>
-              <p className="text-[10px] text-text-secondary font-bold tracking-wider uppercase -mt-0.5">SRS & Readings</p>
+              <p className="text-[10px] text-text-secondary font-bold tracking-wider uppercase -mt-0.5">Dictionary & Readings</p>
             </div>
           </Link>
 
@@ -379,6 +404,7 @@ export function MainLayout({ children }: MainLayoutProps) {
                 placeholder="Search a word or phrase..."
                 value={searchQuery}
                 onChange={(e) => {
+                  selectedVocabularyIdRef.current = null;
                   setSearchQuery(e.target.value);
                   setSearchResult(null);
                   if (!e.target.value.trim()) {
@@ -454,13 +480,16 @@ export function MainLayout({ children }: MainLayoutProps) {
                         </div>
                       )}
 
-                      {(searchResult.meanings?.[0]?.examples?.[0] || searchResult.exampleEn) && (
+                      {getExample(searchResult) && (
                         <div className="text-xs bg-slate-50 p-3 rounded-xl border border-slate-100">
-                          <p className="font-semibold text-text-primary">
-                            "{searchResult.meanings?.[0]?.examples?.[0]?.exampleEn || searchResult.exampleEn}"
-                          </p>
-                          {(searchResult.meanings?.[0]?.examples?.[0]?.exampleVi || searchResult.exampleVi) && (
-                            <p className="text-text-muted mt-0.5">{searchResult.meanings?.[0]?.examples?.[0]?.exampleVi || searchResult.exampleVi}</p>
+                          <p className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider mb-1">Example</p>
+                          {getExample(searchResult)?.exampleEn && (
+                            <p className="font-semibold text-text-primary">
+                              "{getExample(searchResult)?.exampleEn}"
+                            </p>
+                          )}
+                          {getExample(searchResult)?.exampleVi && (
+                            <p className="text-text-muted mt-0.5">{getExample(searchResult)?.exampleVi}</p>
                           )}
                         </div>
                       )}

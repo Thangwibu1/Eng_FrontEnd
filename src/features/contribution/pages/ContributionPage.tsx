@@ -314,6 +314,23 @@ export function ContributionPage() {
     });
   };
 
+  const replaceManualAnnotation = (
+    kind: 'matched' | 'missing',
+    annotation: any
+  ) => {
+    const overlapsSelection = (item: any) =>
+      annotation.start < item.end && annotation.end > item.start;
+
+    setManualMatchedItems((prev) => {
+      const remaining = prev.filter((item) => !overlapsSelection(item));
+      return kind === 'matched' ? [...remaining, annotation] : remaining;
+    });
+    setManualMissingItems((prev) => {
+      const remaining = prev.filter((item) => !overlapsSelection(item));
+      return kind === 'missing' ? [...remaining, annotation] : remaining;
+    });
+  };
+
   const handleProcess = (id: string, action: 'approve' | 'reject') => {
     const note = adminNotes[id] || '';
     processMutation.mutate({ id, action, note });
@@ -716,7 +733,7 @@ export function ContributionPage() {
               <div className="flex justify-between items-center bg-white p-4 rounded-3xl border border-gray-100 shadow-soft">
                 <div className="space-y-1">
                   <h4 className="font-extrabold text-base text-text-primary">Annotating: {readingTitle}</h4>
-                  <p className="text-xs text-text-secondary">Level: {readingLevel} · Highlight text in preview to annotate manually.</p>
+                  <p className="text-xs text-text-secondary">Level: {readingLevel} · Select text to add a highlight, or select across an existing manual highlight to replace it.</p>
                 </div>
                 <button
                   type="button"
@@ -726,6 +743,18 @@ export function ContributionPage() {
                   Back to Edit
                 </button>
               </div>
+
+              {aiAssisted && (
+                <div className="bg-white p-5 md:p-6 rounded-3xl border border-gray-100 shadow-soft space-y-3">
+                  <div className="flex items-start gap-2 rounded-2xl bg-brand-pink/5 border border-brand-pink/10 px-4 py-3">
+                    <Sparkles className="w-4 h-4 text-brand-pink mt-0.5 shrink-0" />
+                    <p className="text-xs text-text-secondary leading-relaxed">
+                      AI results are only a starting point. You can still add, edit, or remove vocabulary below; the highlights in the preview update immediately.
+                    </p>
+                  </div>
+                  <AiSuggestionEditor items={aiSuggestions} onChange={setAiSuggestions} />
+                </div>
+              )}
 
               <div className="grid gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2 space-y-4">
@@ -738,18 +767,6 @@ export function ContributionPage() {
                       manualMissingItems
                     )}
                     onTextSelect={(range) => {
-                      const cleanStart = range.start;
-                      const cleanEnd = range.end;
-                      const hasOverlapWithManual = [...manualMatchedItems, ...manualMissingItems].some((ann) => {
-                        return cleanStart < ann.end && cleanEnd > ann.start;
-                      });
-
-                      if (hasOverlapWithManual) {
-                        alert("Selection overlaps with an existing manual annotation.");
-                        window.getSelection()?.removeAllRanges();
-                        return;
-                      }
-
                       setSelectedRange(range);
                       setCurrentSelectionRange({
                         text: range.text,
@@ -839,21 +856,18 @@ export function ContributionPage() {
             vocabulary={lookupResult ? lookupResult.vocabulary : null}
             onConfirm={() => {
               if (!lookupResult || !lookupResult.vocabulary || !currentSelectionRange) return;
-              setManualMatchedItems((prev) => [
-                ...prev,
-                {
-                  source: 'manual',
-                  status: 'matched',
-                  text: currentSelectionRange.text,
-                  normalizedText: normalizeText(currentSelectionRange.text),
-                  start: currentSelectionRange.start,
-                  end: currentSelectionRange.end,
-                  vocabularyId: lookupResult.vocabulary.id,
-                  matchMethod: 'normalized_text',
-                  type: lookupResult.vocabulary.type,
-                  level: lookupResult.vocabulary.level,
-                },
-              ]);
+              replaceManualAnnotation('matched', {
+                source: 'manual',
+                status: 'matched',
+                text: currentSelectionRange.text,
+                normalizedText: normalizeText(currentSelectionRange.text),
+                start: currentSelectionRange.start,
+                end: currentSelectionRange.end,
+                vocabularyId: lookupResult.vocabulary.id,
+                matchMethod: 'normalized_text',
+                type: lookupResult.vocabulary.type,
+                level: lookupResult.vocabulary.level,
+              });
               setIsLookupOpen(false);
               setLookupResult(null);
               window.getSelection()?.removeAllRanges();
@@ -873,39 +887,33 @@ export function ContributionPage() {
             topicsList={topics || []}
             onChooseSuggestion={(vocab) => {
               if (!currentSelectionRange) return;
-              setManualMatchedItems((prev) => [
-                ...prev,
-                {
-                  source: 'manual',
-                  status: 'matched',
-                  text: currentSelectionRange.text,
-                  normalizedText: normalizeText(currentSelectionRange.text),
-                  start: currentSelectionRange.start,
-                  end: currentSelectionRange.end,
-                  vocabularyId: vocab.id,
-                  matchMethod: 'selected_suggestion',
-                  type: vocab.type,
-                  level: vocab.level,
-                },
-              ]);
+              replaceManualAnnotation('matched', {
+                source: 'manual',
+                status: 'matched',
+                text: currentSelectionRange.text,
+                normalizedText: normalizeText(currentSelectionRange.text),
+                start: currentSelectionRange.start,
+                end: currentSelectionRange.end,
+                vocabularyId: vocab.id,
+                matchMethod: 'selected_suggestion',
+                type: vocab.type,
+                level: vocab.level,
+              });
               setIsFormModalOpen(false);
               setLookupResult(null);
               window.getSelection()?.removeAllRanges();
             }}
             onSave={(suggestedVocabulary) => {
               if (!currentSelectionRange) return;
-              setManualMissingItems((prev) => [
-                ...prev,
-                {
-                  source: 'manual',
-                  status: 'missing',
-                  text: currentSelectionRange.text,
-                  normalizedText: normalizeText(currentSelectionRange.text),
-                  start: currentSelectionRange.start,
-                  end: currentSelectionRange.end,
-                  suggestedVocabulary,
-                },
-              ]);
+              replaceManualAnnotation('missing', {
+                source: 'manual',
+                status: 'missing',
+                text: currentSelectionRange.text,
+                normalizedText: normalizeText(currentSelectionRange.text),
+                start: currentSelectionRange.start,
+                end: currentSelectionRange.end,
+                suggestedVocabulary,
+              });
               setIsFormModalOpen(false);
               setLookupResult(null);
               window.getSelection()?.removeAllRanges();

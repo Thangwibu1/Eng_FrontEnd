@@ -101,7 +101,7 @@ export function AnnotationListPanel({
           Annotation Workspace List
         </h3>
         <p className="text-[10px] text-text-secondary mt-0.5">
-          Manage matched or suggestion vocabularies in this article.
+          Manage highlights here. Remove a manual highlight, or select it again in the preview to replace it.
         </p>
       </div>
 
@@ -220,7 +220,7 @@ export function AnnotationListPanel({
                     type="button"
                     onClick={() => handleDelete(item)}
                     className="p-1.5 text-text-secondary hover:text-rose-600 hover:bg-rose-50 rounded-full transition shrink-0"
-                    title="Delete Annotation"
+                    title="Remove highlight"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>

@@ -60,7 +60,7 @@ export function ForgotPasswordPage() {
             <img src="/bunny_reading.png" className="w-full h-full object-contain rounded-full" alt="Mascot Logo" />
           </div>
           <span className="font-extrabold text-lg text-brand-pink tracking-tight">Hagu</span>
-          <p className="text-[9px] text-text-muted font-bold tracking-widest uppercase -mt-2">SRS & Readings</p>
+          <p className="text-[9px] text-text-muted font-bold tracking-widest uppercase -mt-2">Dictionary & Readings</p>
         </div>
 
         <div className="text-center space-y-1">
