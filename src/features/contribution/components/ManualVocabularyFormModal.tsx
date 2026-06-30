@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Check, Info, Sparkles, BookOpen } from 'lucide-react';
+import { X, Check, Info, Sparkles } from 'lucide-react';
 
 interface ManualVocabularyFormModalProps {
   isOpen: boolean;

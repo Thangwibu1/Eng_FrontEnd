@@ -11,7 +11,6 @@ import { useMarkVocabularyDifficult } from '../../features/vocabulary/hooks/useM
 import { getMyDecks, addCardToDeck } from '../../features/flashcard/api/flashcardApi';
 import { 
   Home, 
-  Book, 
   BookOpen, 
   Layers, 
   PlusCircle, 
@@ -114,6 +113,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   };
 
   const debounceTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipNextSearchRef = React.useRef(false);
 
   const performSearch = async (query: string) => {
     const trimmed = query.trim();
@@ -132,15 +132,9 @@ export function MainLayout({ children }: MainLayoutProps) {
       const searchData = res.data.data;
       const items = searchData.results || [];
 
-      const exact = items.find(
-        (x: any) => (x.matchType === 'exact' || x.text?.trim().toLowerCase() === trimmed.toLowerCase())
-      );
-
-      if (exact) {
-        setSearchResult(exact);
-      } else {
-        setSimilarResults(items);
-      }
+      // Typing only shows suggestions. A result is expanded only after the
+      // user explicitly selects it from the list.
+      setSimilarResults(items);
     } catch (err) {
       console.error(err);
     } finally {
@@ -150,6 +144,11 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   // Trigger search whenever searchQuery changes (debounced)
   React.useEffect(() => {
+    if (skipNextSearchRef.current) {
+      skipNextSearchRef.current = false;
+      return;
+    }
+
     const trimmed = searchQuery.trim();
     if (!trimmed) {
       return;
@@ -177,6 +176,22 @@ export function MainLayout({ children }: MainLayoutProps) {
     }
     setSearchQuery(query);
     performSearch(query);
+  };
+
+  const handleSelectSearchResult = (item: any) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    if (item.text !== searchQuery) {
+      skipNextSearchRef.current = true;
+      setSearchQuery(item.text);
+    }
+    setSearchResult(item);
+    setSimilarResults([]);
+    setShowSearchDropdown(true);
+    setDeckMessage('');
+    setSelectedDeckId('');
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -207,7 +222,6 @@ export function MainLayout({ children }: MainLayoutProps) {
   const navItems = [
     { path: '/', label: 'Home', icon: Home, color: 'text-brand-pink hover:bg-brand-pink/10' },
     { path: '/readings', label: 'Readings', icon: BookOpen, color: 'text-brand-blue hover:bg-brand-blue/10' },
-    { path: '/vocabularies', label: 'Dictionary', icon: Book, color: 'text-emerald-500 hover:bg-emerald-50' },
     { path: '/flashcards', label: 'Flashcards', icon: Layers, color: 'text-brand-pink hover:bg-brand-pink/10' },
     { path: '/contributions', label: 'Contributions', icon: PlusCircle, color: 'text-amber-500 hover:bg-amber-50' },
     ...(user?.role === 'admin' ? [{ path: '/vocabularies/add', label: 'Add Vocab', icon: Plus, color: 'text-purple-500 hover:bg-purple-50' }] : []),
@@ -366,9 +380,9 @@ export function MainLayout({ children }: MainLayoutProps) {
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
+                  setSearchResult(null);
                   if (!e.target.value.trim()) {
                     setShowSearchDropdown(false);
-                    setSearchResult(null);
                     setSimilarResults([]);
                   }
                 }}
@@ -507,13 +521,13 @@ export function MainLayout({ children }: MainLayoutProps) {
                     </div>
                   ) : similarResults.length > 0 ? (
                     <div className="p-3 space-y-1.5">
-                      <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-1">Similar matches</p>
+                      <p className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-1">Search results</p>
                       {similarResults.map((item: any) => {
                         const meaningVi = getMeaningVi(item);
                         return (
                           <button
                             key={item.id || item._id}
-                            onClick={() => handleSearchImmediate(item.text)}
+                            onClick={() => handleSelectSearchResult(item)}
                             className="w-full text-left px-3 py-2.5 hover:bg-brand-pink/5 rounded-xl transition group"
                           >
                             <span className="font-bold text-text-primary text-sm block group-hover:text-brand-pink transition">{item.text}</span>

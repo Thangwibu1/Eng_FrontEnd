@@ -191,9 +191,6 @@ export function HomePage() {
                 </div>
                 <h3 className="text-lg font-black text-text-primary">Vocabulary</h3>
               </div>
-              <Link to="/vocabularies" className="text-[11px] font-bold bg-slate-50 border border-slate-100 hover:bg-slate-100 text-text-secondary px-3 py-1.5 rounded-full">
-                View all
-              </Link>
             </div>
 
             {/* Popular Topics */}
@@ -246,7 +243,6 @@ export function HomePage() {
             <div className="space-y-2 pt-1">
               <div className="flex justify-between items-center">
                 <p className="text-[11px] font-extrabold text-text-secondary uppercase tracking-wider">Recent Words</p>
-                <Link to="/vocabularies" className="text-[10px] font-bold text-brand-blue">Review All</Link>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {recentWordsToRender.map((word) => (

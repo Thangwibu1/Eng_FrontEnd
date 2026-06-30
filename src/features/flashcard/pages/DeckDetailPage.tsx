@@ -101,7 +101,7 @@ export function DeckDetailPage() {
             <div>
               <h3 className="text-lg font-bold text-text-primary">No cards in this deck yet</h3>
               <p className="text-text-secondary text-sm mt-1 max-w-sm mx-auto leading-relaxed">
-                Start reading context articles or visit the Dictionary to lookup and save words into this deck.
+                Start reading context articles or use the search bar above to find and save words into this deck.
               </p>
             </div>
             <div className="pt-2 flex justify-center gap-3">
@@ -110,12 +110,6 @@ export function DeckDetailPage() {
                 className="px-5 py-2.5 bg-brand-pink text-white font-bold text-xs rounded-full hover:bg-brand-pink/90 hover:scale-105 active:scale-95 transition-all-180 shadow-soft"
               >
                 Go to Readings
-              </Link>
-              <Link
-                to="/vocabularies"
-                className="px-5 py-2.5 border border-gray-150 text-text-secondary bg-white font-bold text-xs rounded-full hover:bg-gray-50 hover:scale-105 active:scale-95 transition-all-180"
-              >
-                Dictionary Search
               </Link>
             </div>
           </div>
