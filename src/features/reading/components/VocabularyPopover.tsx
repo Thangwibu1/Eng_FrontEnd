@@ -39,8 +39,8 @@ export function VocabularyPopover({
         let vertical = 'bottom-full mb-3.5';
         let horizontal = 'left-0';
 
-        // Check if there is enough space above (popover height is around ~380px)
-        if (parentRect.top < 380) {
+        // Check if there is enough space above (popover height is around ~380px + header height ~64px)
+        if (parentRect.top < 450) {
           vertical = 'top-full mt-3.5';
         }
 
