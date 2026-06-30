@@ -67,12 +67,12 @@ export function ReadingDetailPage() {
             )}
           </div>
 
-          <h1 className="text-4xl font-extrabold text-text-primary tracking-tight max-w-2xl mx-auto">
+          <h1 className="text-4xl font-extrabold text-text-primary tracking-tight max-w-3xl mx-auto">
             {reading.title}
           </h1>
 
           {reading.subtitle && (
-            <p className="text-lg text-text-secondary max-w-xl mx-auto font-medium">
+            <p className="text-lg text-text-secondary max-w-2xl mx-auto font-medium">
               {reading.subtitle}
             </p>
           )}

@@ -14,7 +14,7 @@ export function ReadingRenderer({ readingId, spans, vocabularyMap }: ReadingRend
   const sortedSpans = [...spans].sort((a, b) => a.orderIndex - b.orderIndex);
 
   return (
-    <article className="mt-8 text-xl leading-10 font-normal tracking-wide text-text-primary text-justify bg-white rounded-3xl border border-gray-50 p-8 shadow-soft max-w-2xl mx-auto">
+    <article className="mt-8 text-xl leading-10 font-normal tracking-wide text-text-primary text-left bg-white rounded-3xl border border-gray-50 p-8 shadow-soft max-w-3xl mx-auto">
       {sortedSpans.map((span, index) => (
         <ReadingSpan
           key={span.orderIndex || index}
