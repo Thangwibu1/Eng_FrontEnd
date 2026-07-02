@@ -50,6 +50,20 @@ const getExample = (item: any) => {
     : null);
 };
 
+const getSynonyms = (item: any): string[] => {
+  const fromMeanings = item?.meanings?.flatMap((m: any) => m?.synonyms || []) || [];
+  const direct = item?.synonyms || [];
+  const all = [...fromMeanings, ...direct];
+  return [...new Set(all)].filter(Boolean).slice(0, 6);
+};
+
+const getAntonyms = (item: any): string[] => {
+  const fromMeanings = item?.meanings?.flatMap((m: any) => m?.antonyms || []) || [];
+  const direct = item?.antonyms || [];
+  const all = [...fromMeanings, ...direct];
+  return [...new Set(all)].filter(Boolean).slice(0, 6);
+};
+
 export function MainLayout({ children }: MainLayoutProps) {
   const { data: user } = useMe();
   const navigate = useNavigate();
@@ -490,6 +504,43 @@ export function MainLayout({ children }: MainLayoutProps) {
                           )}
                           {getExample(searchResult)?.exampleVi && (
                             <p className="text-text-muted mt-0.5">{getExample(searchResult)?.exampleVi}</p>
+                          )}
+                        </div>
+                      )}
+
+                      {(getSynonyms(searchResult).length > 0 || getAntonyms(searchResult).length > 0) && (
+                        <div className="space-y-2">
+                          {getSynonyms(searchResult).length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider mb-1.5">Synonyms</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {getSynonyms(searchResult).map((word: string) => (
+                                  <button
+                                    key={word}
+                                    onClick={() => handleSearchImmediate(word)}
+                                    className="px-2.5 py-1 bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue text-[11px] font-bold rounded-full transition"
+                                  >
+                                    {word}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {getAntonyms(searchResult).length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-extrabold text-text-muted uppercase tracking-wider mb-1.5">Antonyms</p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {getAntonyms(searchResult).map((word: string) => (
+                                  <button
+                                    key={word}
+                                    onClick={() => handleSearchImmediate(word)}
+                                    className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-500 text-[11px] font-bold rounded-full transition"
+                                  >
+                                    {word}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           )}
                         </div>
                       )}
